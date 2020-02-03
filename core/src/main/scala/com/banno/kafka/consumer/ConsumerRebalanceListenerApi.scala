@@ -12,6 +12,13 @@ trait ConsumerRebalanceListenerApi[F[_]] {
 }
 
 object ConsumerRebalanceListenerApi {
+
+  def apply[F[_]](revoked: Iterable[TopicPartition] => F[Unit])(assigned: Iterable[TopicPartition] => F[Unit]): ConsumerRebalanceListenerApi[F] = 
+    new ConsumerRebalanceListenerApi[F] {
+      override def onPartitionsRevoked(partitions: Iterable[TopicPartition]): F[Unit] = revoked(partitions)
+      override def onPartitionsAssigned(partitions: Iterable[TopicPartition]): F[Unit] = assigned(partitions)
+    }
+
   //an alternative might be to push this into the contract of ConsumerRebalanceListenerApi, to allow/force developers to handle in use-case-specific manner?
   //as it stands, a failed effect will throw on the java client's call to onPartitionsRevoked/Assigned, not sure how that bubbles up...
   def raiseError[A]: Either[Throwable, A] => IO[Unit] = {
