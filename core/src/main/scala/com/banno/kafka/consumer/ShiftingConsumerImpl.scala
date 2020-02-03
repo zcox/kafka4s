@@ -95,10 +95,10 @@ case class ShiftingConsumerImpl[F[_]: Async, K, V](
   def seekToEnd(partitions: Iterable[TopicPartition]): F[Unit] =
     CS.evalOn(blockingContext)(c.seekToEnd(partitions))
   def subscribe(topics: Iterable[String]): F[Unit] = CS.evalOn(blockingContext)(c.subscribe(topics))
-  def subscribe(topics: Iterable[String], callback: ConsumerRebalanceListener): F[Unit] =
+  def subscribe(topics: Iterable[String], callback: ConsumerRebalanceListenerApi[F]): F[Unit] =
     CS.evalOn(blockingContext)(c.subscribe(topics, callback))
   def subscribe(pattern: Pattern): F[Unit] = CS.evalOn(blockingContext)(c.subscribe(pattern))
-  def subscribe(pattern: Pattern, callback: ConsumerRebalanceListener): F[Unit] =
+  def subscribe(pattern: Pattern, callback: ConsumerRebalanceListenerApi[F]): F[Unit] =
     CS.evalOn(blockingContext)(c.subscribe(pattern, callback))
   def subscription: F[Set[String]] = CS.evalOn(blockingContext)(c.subscription)
   def unsubscribe: F[Unit] = CS.evalOn(blockingContext)(c.unsubscribe)

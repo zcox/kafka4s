@@ -29,7 +29,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import scala.concurrent.duration._
 import org.apache.kafka.common.TopicPartition
 
-final class ExampleApp[F[_]: Async: ContextShift] {
+final class ExampleApp[F[_]: Effect: ContextShift] {
   import ExampleApp._
 
   // Change these for your environment as needed
@@ -112,5 +112,5 @@ object ExampleApp {
   implicit def customerIdRecordFormat = RecordFormat[CustomerId]
   implicit def customerRecordFormat = RecordFormat[Customer]
 
-  def apply[F[_]: Async: ContextShift] = new ExampleApp[F]
+  def apply[F[_]: Effect: ContextShift] = new ExampleApp[F]
 }

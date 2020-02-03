@@ -17,7 +17,7 @@
 package com.banno.kafka.consumer
 
 import cats.implicits._
-import cats.effect.{Async, ContextShift, Resource, Sync}
+import cats.effect.{ContextShift, Resource, Effect}
 import fs2.Stream
 import java.util.regex.Pattern
 import scala.collection.JavaConverters._
@@ -77,9 +77,9 @@ trait ConsumerApi[F[_], K, V] {
   def seekToBeginning(partitions: Iterable[TopicPartition]): F[Unit]
   def seekToEnd(partitions: Iterable[TopicPartition]): F[Unit]
   def subscribe(topics: Iterable[String]): F[Unit]
-  def subscribe(topics: Iterable[String], callback: ConsumerRebalanceListener): F[Unit]
+  def subscribe(topics: Iterable[String], callback: ConsumerRebalanceListenerApi[F]): F[Unit]
   def subscribe(pattern: Pattern): F[Unit]
-  def subscribe(pattern: Pattern, callback: ConsumerRebalanceListener): F[Unit]
+  def subscribe(pattern: Pattern, callback: ConsumerRebalanceListenerApi[F]): F[Unit]
   def subscription: F[Set[String]]
   def unsubscribe: F[Unit]
   def wakeup: F[Unit]
@@ -87,23 +87,23 @@ trait ConsumerApi[F[_], K, V] {
 
 object ConsumerApi {
 
-  private[this] def createKafkaConsumer[F[_]: Sync, K, V](
+  private[this] def createKafkaConsumer[F[_]: Effect, K, V](
       configs: (String, AnyRef)*
   ): F[KafkaConsumer[K, V]] =
-    Sync[F].delay(new KafkaConsumer[K, V](configs.toMap.asJava))
+    Effect[F].delay(new KafkaConsumer[K, V](configs.toMap.asJava))
 
-  private[this] def createKafkaConsumer[F[_]: Sync, K, V](
+  private[this] def createKafkaConsumer[F[_]: Effect, K, V](
       keyDeserializer: Deserializer[K],
       valueDeserializer: Deserializer[V],
       configs: (String, AnyRef)*
   ): F[KafkaConsumer[K, V]] =
-    Sync[F].delay(new KafkaConsumer[K, V](configs.toMap.asJava, keyDeserializer, valueDeserializer))
+    Effect[F].delay(new KafkaConsumer[K, V](configs.toMap.asJava, keyDeserializer, valueDeserializer))
 
   object BlockingContext {
 
-    def resource[F[_]: Sync]: Resource[F, ExecutionContextExecutorService] =
+    def resource[F[_]: Effect]: Resource[F, ExecutionContextExecutorService] =
       Resource.make(
-        Sync[F].delay(
+        Effect[F].delay(
           ExecutionContext.fromExecutorService(Executors.newSingleThreadExecutor(new ThreadFactory {
             val factory = Executors.defaultThreadFactory()
             def newThread(r: Runnable): Thread = {
@@ -113,10 +113,10 @@ object ConsumerApi {
             }
           }))
         )
-      )(a => Sync[F].delay(a.shutdown()))
+      )(a => Effect[F].delay(a.shutdown()))
   }
 
-  def resource[F[_]: Async: ContextShift, K, V](
+  def resource[F[_]: Effect: ContextShift, K, V](
       keyDeserializer: Deserializer[K],
       valueDeserializer: Deserializer[V],
       configs: (String, AnyRef)*
@@ -129,14 +129,14 @@ object ConsumerApi {
         )(_.close)
     )
 
-  def resource[F[_]: Async: ContextShift, K: Deserializer, V: Deserializer](
+  def resource[F[_]: Effect: ContextShift, K: Deserializer, V: Deserializer](
       configs: (String, AnyRef)*
   ): Resource[F, ConsumerApi[F, K, V]] =
     resource[F, K, V](implicitly[Deserializer[K]], implicitly[Deserializer[V]], configs: _*)
 
   object Avro {
 
-    def resource[F[_]: Async: ContextShift, K, V](
+    def resource[F[_]: Effect: ContextShift, K, V](
         configs: (String, AnyRef)*
     ): Resource[F, ConsumerApi[F, K, V]] =
       BlockingContext.resource.flatMap(
@@ -154,12 +154,12 @@ object ConsumerApi {
 
     object Generic {
 
-      def resource[F[_]: Async: ContextShift](
+      def resource[F[_]: Effect: ContextShift](
           configs: (String, AnyRef)*
       ): Resource[F, ConsumerApi[F, GenericRecord, GenericRecord]] =
         ConsumerApi.Avro.resource[F, GenericRecord, GenericRecord](configs: _*)
 
-      def stream[F[_]: Async: ContextShift](
+      def stream[F[_]: Effect: ContextShift](
           configs: (String, AnyRef)*
       ): Stream[F, ConsumerApi[F, GenericRecord, GenericRecord]] =
         Stream.resource(resource[F](configs: _*))
@@ -167,7 +167,7 @@ object ConsumerApi {
 
     object Specific {
 
-      def resource[F[_]: Async: ContextShift, K, V](
+      def resource[F[_]: Effect: ContextShift, K, V](
           configs: (String, AnyRef)*
       ): Resource[F, ConsumerApi[F, K, V]] =
         ConsumerApi.Avro.resource[F, K, V]((configs.toMap + SpecificAvroReader(true)).toSeq: _*)
@@ -176,7 +176,7 @@ object ConsumerApi {
 
   object Avro4s {
 
-    def resource[F[_]: Async: ContextShift, K: FromRecord, V: FromRecord](
+    def resource[F[_]: Effect: ContextShift, K: FromRecord, V: FromRecord](
         configs: (String, AnyRef)*
     ): Resource[F, ConsumerApi[F, K, V]] =
       ConsumerApi.Avro.Generic.resource[F](configs: _*).map(Avro4sConsumerImpl(_))
@@ -184,7 +184,7 @@ object ConsumerApi {
 
   object NonShifting {
 
-    def resource[F[_]: Sync, K, V](
+    def resource[F[_]: Effect, K, V](
         keyDeserializer: Deserializer[K],
         valueDeserializer: Deserializer[V],
         configs: (String, AnyRef)*
@@ -194,7 +194,7 @@ object ConsumerApi {
           .map(ConsumerImpl.create(_))
       )(_.close)
 
-    def resource[F[_]: Sync, K: Deserializer, V: Deserializer](
+    def resource[F[_]: Effect, K: Deserializer, V: Deserializer](
         configs: (String, AnyRef)*
     ): Resource[F, ConsumerApi[F, K, V]] =
       resource[F, K, V](implicitly[Deserializer[K]], implicitly[Deserializer[V]], configs: _*)

@@ -83,10 +83,10 @@ case class Avro4sConsumerImpl[F[_]: Functor, K: FromRecord, V: FromRecord](
   def seekToBeginning(partitions: Iterable[TopicPartition]): F[Unit] = c.seekToBeginning(partitions)
   def seekToEnd(partitions: Iterable[TopicPartition]): F[Unit] = c.seekToEnd(partitions)
   def subscribe(topics: Iterable[String]): F[Unit] = c.subscribe(topics)
-  def subscribe(topics: Iterable[String], callback: ConsumerRebalanceListener): F[Unit] =
+  def subscribe(topics: Iterable[String], callback: ConsumerRebalanceListenerApi[F]): F[Unit] =
     c.subscribe(topics, callback)
   def subscribe(pattern: Pattern): F[Unit] = c.subscribe(pattern)
-  def subscribe(pattern: Pattern, callback: ConsumerRebalanceListener): F[Unit] =
+  def subscribe(pattern: Pattern, callback: ConsumerRebalanceListenerApi[F]): F[Unit] =
     c.subscribe(pattern, callback)
   def subscription: F[Set[String]] = c.subscription
   def unsubscribe: F[Unit] = c.unsubscribe

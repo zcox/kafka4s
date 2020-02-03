@@ -17,7 +17,7 @@
 package com.banno.kafka.consumer
 
 import cats.implicits._
-import cats.effect.Sync
+import cats.effect.Effect
 import java.util.regex.Pattern
 
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -27,7 +27,7 @@ import scala.concurrent.duration._
 import org.apache.kafka.common._
 import org.apache.kafka.clients.consumer._
 
-case class ConsumerImpl[F[_], K, V](c: Consumer[K, V])(implicit F: Sync[F])
+case class ConsumerImpl[F[_], K, V](c: Consumer[K, V])(implicit F: Effect[F])
     extends ConsumerApi[F, K, V] {
   private[this] val log = Slf4jLogger.getLoggerFromClass(this.getClass)
   def assign(partitions: Iterable[TopicPartition]): F[Unit] =
@@ -125,11 +125,11 @@ case class ConsumerImpl[F[_], K, V](c: Consumer[K, V])(implicit F: Sync[F])
   def seekToEnd(partitions: Iterable[TopicPartition]): F[Unit] =
     F.delay(c.seekToEnd(partitions.asJavaCollection)) *> log.debug(s"Seeked to end: $partitions")
   def subscribe(topics: Iterable[String]): F[Unit] = F.delay(c.subscribe(topics.asJavaCollection))
-  def subscribe(topics: Iterable[String], callback: ConsumerRebalanceListener): F[Unit] =
-    F.delay(c.subscribe(topics.asJavaCollection, callback))
+  def subscribe(topics: Iterable[String], callback: ConsumerRebalanceListenerApi[F]): F[Unit] =
+    F.delay(c.subscribe(topics.asJavaCollection, ConsumerRebalanceListenerApi.unsafe[F](callback)))
   def subscribe(pattern: Pattern): F[Unit] = F.delay(c.subscribe(pattern))
-  def subscribe(pattern: Pattern, callback: ConsumerRebalanceListener): F[Unit] =
-    F.delay(c.subscribe(pattern, callback))
+  def subscribe(pattern: Pattern, callback: ConsumerRebalanceListenerApi[F]): F[Unit] =
+    F.delay(c.subscribe(pattern, ConsumerRebalanceListenerApi.unsafe[F](callback)))
   def subscription: F[Set[String]] = F.delay(c.subscription().asScala.toSet)
   def unsubscribe: F[Unit] = F.delay(c.unsubscribe())
   def wakeup: F[Unit] = F.delay(c.wakeup())
@@ -137,7 +137,7 @@ case class ConsumerImpl[F[_], K, V](c: Consumer[K, V])(implicit F: Sync[F])
 
 object ConsumerImpl {
   //returns the type expected when creating a Resource
-  def create[F[_]: Sync, K, V](
+  def create[F[_]: Effect, K, V](
       c: Consumer[K, V]
   ): ConsumerApi[F, K, V] =
     ConsumerImpl(c)

@@ -57,10 +57,10 @@ trait ConsumerApiWrapper[F[_], K, V] extends ConsumerApi[F, K, V] {
     api.seekToBeginning(partitions)
   def seekToEnd(partitions: Iterable[TopicPartition]): F[Unit] = api.seekToEnd(partitions)
   def subscribe(topics: Iterable[String]): F[Unit] = api.subscribe(topics)
-  def subscribe(topics: Iterable[String], callback: ConsumerRebalanceListener): F[Unit] =
+  def subscribe(topics: Iterable[String], callback: ConsumerRebalanceListenerApi[F]): F[Unit] =
     api.subscribe(topics, callback)
   def subscribe(pattern: Pattern): F[Unit] = api.subscribe(pattern)
-  def subscribe(pattern: Pattern, callback: ConsumerRebalanceListener): F[Unit] =
+  def subscribe(pattern: Pattern, callback: ConsumerRebalanceListenerApi[F]): F[Unit] =
     api.subscribe(pattern, callback)
   def subscription: F[Set[String]] = api.subscription
   def unsubscribe: F[Unit] = api.unsubscribe
