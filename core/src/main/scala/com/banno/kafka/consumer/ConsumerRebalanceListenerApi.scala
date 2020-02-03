@@ -13,10 +13,14 @@ trait ConsumerRebalanceListenerApi[F[_]] {
 
 object ConsumerRebalanceListenerApi {
 
-  def apply[F[_]](revoked: Iterable[TopicPartition] => F[Unit])(assigned: Iterable[TopicPartition] => F[Unit]): ConsumerRebalanceListenerApi[F] = 
+  def apply[F[_]](
+      revoked: Iterable[TopicPartition] => F[Unit]
+  )(assigned: Iterable[TopicPartition] => F[Unit]): ConsumerRebalanceListenerApi[F] =
     new ConsumerRebalanceListenerApi[F] {
-      override def onPartitionsRevoked(partitions: Iterable[TopicPartition]): F[Unit] = revoked(partitions)
-      override def onPartitionsAssigned(partitions: Iterable[TopicPartition]): F[Unit] = assigned(partitions)
+      override def onPartitionsRevoked(partitions: Iterable[TopicPartition]): F[Unit] =
+        revoked(partitions)
+      override def onPartitionsAssigned(partitions: Iterable[TopicPartition]): F[Unit] =
+        assigned(partitions)
     }
 
   //an alternative might be to push this into the contract of ConsumerRebalanceListenerApi, to allow/force developers to handle in use-case-specific manner?
@@ -26,11 +30,11 @@ object ConsumerRebalanceListenerApi {
     case Left(t) => IO.raiseError(t)
   }
 
-  def unsafe[F[_]: Effect](api: ConsumerRebalanceListenerApi[F]): ConsumerRebalanceListener = 
+  def unsafe[F[_]: Effect](api: ConsumerRebalanceListenerApi[F]): ConsumerRebalanceListener =
     new ConsumerRebalanceListener() {
-      override def onPartitionsRevoked(partitions: JCollection[TopicPartition]): Unit = 
+      override def onPartitionsRevoked(partitions: JCollection[TopicPartition]): Unit =
         Effect[F].runAsync(api.onPartitionsRevoked(partitions.asScala))(raiseError).unsafeRunSync()
-      override def onPartitionsAssigned(partitions: JCollection[TopicPartition]): Unit = 
+      override def onPartitionsAssigned(partitions: JCollection[TopicPartition]): Unit =
         Effect[F].runAsync(api.onPartitionsAssigned(partitions.asScala))(raiseError).unsafeRunSync()
     }
 }

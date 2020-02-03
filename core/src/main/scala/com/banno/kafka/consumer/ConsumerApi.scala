@@ -17,7 +17,7 @@
 package com.banno.kafka.consumer
 
 import cats.implicits._
-import cats.effect.{ContextShift, Resource, Effect}
+import cats.effect.{ContextShift, Effect, Resource}
 import fs2.Stream
 import java.util.regex.Pattern
 import scala.collection.JavaConverters._
@@ -97,7 +97,9 @@ object ConsumerApi {
       valueDeserializer: Deserializer[V],
       configs: (String, AnyRef)*
   ): F[KafkaConsumer[K, V]] =
-    Effect[F].delay(new KafkaConsumer[K, V](configs.toMap.asJava, keyDeserializer, valueDeserializer))
+    Effect[F].delay(
+      new KafkaConsumer[K, V](configs.toMap.asJava, keyDeserializer, valueDeserializer)
+    )
 
   object BlockingContext {
 
