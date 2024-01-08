@@ -45,18 +45,28 @@ case class ConsumerImpl[F[_], K, V](c: Consumer[K, V])(implicit F: Sync[F])
       .delay(
         c.close(java.time.Duration.ofMillis(timeout.toMillis))
       ) *> log.debug(s"${Thread.currentThread.getId} consumer.close($timeout)")
-  override def commitAsync: F[Unit] = F.delay(c.commitAsync())
+
+  // TODO should the commitSync/Async calls use F.blocking or F.interruptible?
+
+  override def commitAsync: F[Unit] =
+    F.blocking(c.commitAsync())
+
+  override def commitAsync(callback: OffsetCommitCallback): F[Unit] =
+    F.blocking(c.commitAsync(callback))
+
   override def commitAsync(
       offsets: Map[TopicPartition, OffsetAndMetadata],
       callback: OffsetCommitCallback,
-  ): F[Unit] = F.delay(c.commitAsync(offsets.asJava, callback))
-  override def commitAsync(callback: OffsetCommitCallback): F[Unit] =
-    F.delay(c.commitAsync(callback))
-  override def commitSync: F[Unit] = F.delay(c.commitSync())
+  ): F[Unit] =
+    F.blocking(c.commitAsync(offsets.asJava, callback))
+
+  override def commitSync: F[Unit] =
+    F.blocking(c.commitSync())
+
   override def commitSync(
       offsets: Map[TopicPartition, OffsetAndMetadata]
   ): F[Unit] =
-    F.delay(c.commitSync(offsets.asJava))
+    F.blocking(c.commitSync(offsets.asJava))
 
   override def listTopics: F[Map[String, Seq[PartitionInfo]]] =
     F.delay(c.listTopics().asScala.toMap.view.mapValues(_.asScala.toSeq).toMap)
@@ -78,10 +88,14 @@ case class ConsumerImpl[F[_], K, V](c: Consumer[K, V])(implicit F: Sync[F])
     F.delay(c.pause(partitions.asJavaCollection))
   override def paused: F[Set[TopicPartition]] =
     F.delay(c.paused().asScala.toSet)
+
   override def poll(timeout: FiniteDuration): F[ConsumerRecords[K, V]] =
-    log.trace(s"${Thread.currentThread.getId} poll($timeout)...") *> F.delay(
+    log.trace(s"${Thread.currentThread.getId} poll($timeout)...") *>
+    // TODO verify that poll is interruptible/cancelable, otherwise use F.blocking
+    F.interruptible(
       c.poll(java.time.Duration.ofMillis(timeout.toMillis))
     )
+
   override def position(partition: TopicPartition): F[Long] =
     F.delay(c.position(partition))
   override def resume(partitions: Iterable[TopicPartition]): F[Unit] =

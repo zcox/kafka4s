@@ -133,12 +133,15 @@ case class ProducerImpl[F[_], K, V](p: Producer[K, V])(implicit
     * full, it will block until the record can be enqueued (i.e. backpressure).
     * The outer effect is executed on a blocking context and is cancelable. The
     * outer effect will only contain an error if the Producer.send call throws
-    * an exception. The inner effect completes asynchronously after Kafka
-    * acknowledges the write, and the RecordMetadata is available. The inner
-    * effect will only contain an error if the write failed. The inner effect is
-    * also cancelable. With this operation, user code can react to both the
-    * producer's initial buffering of the record to be sent, and the final
-    * result of the write (either success or failure).
+    * an exception.
+    *
+    * The inner effect completes asynchronously after Kafka acknowledges the
+    * write, and the RecordMetadata is available. The inner effect will only
+    * contain an error if the write failed. The inner effect is also cancelable.
+    *
+    * With this operation, user code can react to both the producer's initial
+    * buffering of the record to be sent, and the final result of the write
+    * (either success or failure).
     */
   def send(record: ProducerRecord[K, V]): F[F[RecordMetadata]] =
     // inspired by https://github.com/fd4s/fs2-kafka/blob/series/3.x/modules/core/src/main/scala/fs2/kafka/KafkaProducer.scala

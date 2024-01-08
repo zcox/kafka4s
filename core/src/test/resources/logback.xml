@@ -6,7 +6,7 @@
         </encoder>
     </appender>
 
-    <logger name="org.apache.curator" level="WARN"/>
+    <!-- <logger name="org.apache.curator" level="WARN"/>
     <logger name="org.apache.zookeeper" level="WARN"/>
     <logger name="org.I0Itec" level="WARN"/>
     <logger name="org.eclipse.jetty" level="ERROR"/>
@@ -19,9 +19,9 @@
     <logger name="org.apache.kafka.clients.consumer.ConsumerConfig" level="ERROR"/>
     <logger name="io.confluent.kafka.schemaregistry.storage.KafkaStore" level="ERROR"/>
     
-    <logger name="com.banno" level="DEBUG"/>
+    <logger name="com.banno" level="DEBUG"/> -->
 
-    <root level="INFO">
+    <root level="TRACE">
         <appender-ref ref="STDOUT" />
     </root>
 

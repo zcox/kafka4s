@@ -30,6 +30,9 @@ import org.apache.kafka.common.errors.WakeupException
 import org.apache.kafka.clients.consumer.*
 import fs2.concurrent.{Signal, SignallingRef}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
+import scala.concurrent.Promise
+import java.util.{Map => JMap}
+import scala.util.Try
 
 case class PartitionQueriesOps[F[_]](consumer: PartitionQueries[F]) {
 
@@ -353,6 +356,86 @@ case class ConsumerOps[F[_], K, V](consumer: ConsumerApi[F, K, V]) {
       .recordStream(pollTimeout)
       .evalMap(r => process(r) <* consumer.commitSync(r.nextOffset))
 
+  // TODO this works, but is maybe a bit jank, and maybe should be moved
+  implicit class CommitCallback(callback: Try[Unit] => _)
+      extends OffsetCommitCallback {
+    override def onComplete(
+        os: JMap[TopicPartition, OffsetAndMetadata],
+        e: Exception,
+    ): Unit = {
+      println(s"onComplete: before callback, os=$os, e=$e")
+      val x = callback(Option(e).toLeft(()).toTry): Unit
+      println(s"onComplete: after callback")
+      x
+    }
+  }
+
+  def commitCallback(callback: Try[Unit] => Any): OffsetCommitCallback = {
+    println("******************Creating new OffsetCommitCallback")
+    new OffsetCommitCallback {
+      override def onComplete(
+          os: JMap[TopicPartition, OffsetAndMetadata],
+          e: Exception,
+      ): Unit = {
+        println(s"****************** onComplete: before callback, os=$os, e=$e")
+        val x = callback(Option(e).toLeft(()).toTry): Unit
+        println(s"****************** onComplete: after callback")
+        x
+      }
+    }
+  }
+
+  def commit(implicit F: Async[F]): F[F[Unit]] =
+    F.delay(Promise[Unit]())
+      .flatMap(promise =>
+        consumer
+          .commitAsync(promise.complete)
+          .map(_ => F.fromFuture(F.delay(promise.future)))
+      )
+
+  /** Commits the specified offsets asynchronously. Returns nested effects
+    * representing the two parts of offset committing.
+    *
+    * The outer effect completes synchronously when the underlying
+    * Consumer.commitAsync call returns. This should normally be very fast and
+    * not block, but the underlying consumer does do some things before
+    * returning. The outer effect executes on a blocking context. The outer
+    * effect will only contain an error if the Consumer.commitAsync call throws
+    * an exception.
+    *
+    * The inner effect completes asynchronously after Kafka acknowledges the
+    * commit. The inner effect will only contain an error if the commit failed.
+    *
+    * While this operation provides the most detailed information about offset
+    * committing, the corresponding method that returns a single effect may be
+    * more convenient to use.
+    */
+  def commit(
+      offsets: Map[TopicPartition, OffsetAndMetadata]
+  )(implicit F: Async[F]): F[F[Unit]] =
+    F.delay(Promise[Unit]())
+      .flatMap(promise =>
+        consumer
+          .commitAsync(offsets, commitCallback(promise.complete))
+          .map(_ => F.fromFuture(F.delay(promise.future)))
+      )
+
+  def commitSuperAsync(implicit F: Async[F]): F[Unit] =
+    commit.flatten
+
+  /** Commits the specified offsets asynchronously. The returned effect
+    * completes when Kafka acknowledges the commit. Semantically blocks until
+    * the offset is committted; does not block the calling thread. The
+    * underlying Consumer.commitAsync call is performed on a blocking context,
+    * while the actual network I/O is performed on a Kafka client thread. The
+    * effect contains an error if the Consumer.commitAsync call threw an
+    * exception, or if the offset commit failed for any other reason.
+    */
+  def commitSuperAsync(
+      offsets: Map[TopicPartition, OffsetAndMetadata]
+  )(implicit F: Async[F]): F[Unit] =
+    commit(offsets).flatten
+
   /** Returns a stream that processes records using the specified function,
     * committing offsets for successfully processed records, either after
     * processing the specified number of records, or after the specified time
@@ -371,10 +454,10 @@ case class ConsumerOps[F[_], K, V](consumer: ConsumerApi[F, K, V]) {
       maxElapsedTime: FiniteDuration = 60.seconds,
   )(
       process: ConsumerRecord[K, V] => F[A]
-  )(implicit C: Clock[F], S: Concurrent[F]): Stream[F, A] =
+  )(implicit F: Async[F]): Stream[F, A] =
     for {
       state <- Stream.eval(
-        C.monotonic
+        F.monotonic
           .flatMap(now =>
             Ref.of[F, OffsetCommitState](OffsetCommitState.empty(now))
           )
@@ -385,15 +468,15 @@ case class ConsumerOps[F[_], K, V](consumer: ConsumerApi[F, K, V]) {
           .onError(_ =>
             // we can still commit offsets that were successfully processed, before this stream halts, consumer is closed, etc
             // this is still at-least-once processing, but minimizes the amount of reprocessing after restart
-            state.get.flatMap(s => consumer.commitSync(s.nextOffsets))
+            state.get.flatMap(s => consumer.commitSuperAsync(s.nextOffsets))
           )
       )
       s <- Stream.eval(state.updateAndGet(_.update(record)))
-      now <- Stream.eval(C.monotonic)
+      now <- Stream.eval(F.monotonic)
       () <- Stream.eval(
         s.needToCommit(maxRecordCount, now, maxElapsedTime)
           .traverse_(os =>
-            consumer.commitSync(os) *>
+            consumer.commitSuperAsync(os) *>
             state.update(_.reset(now))
           )
       )
